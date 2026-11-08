@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/account.dart';
 import '../models/categories.dart';
+import '../models/recurring_rule.dart';
 import '../models/transaction.dart';
 import '../state/finance_provider.dart';
 import '../utils/format.dart';
@@ -18,6 +20,12 @@ class HomeScreen extends StatelessWidget {
     final double income = provider.incomeForMonth(now);
     final double expense = provider.expenseForMonth(now);
     final List<Txn> recent = provider.txns.take(8).toList();
+    final bool hidden = provider.hideAmounts;
+    final double? pace = provider.budgetPace();
+    final List<({RecurringRule rule, DateTime date})> upcoming =
+        provider.upcomingBills(7);
+
+    String money(double value) => hidden ? '••••' : fmtMoney(value);
 
     final List<String> alerts = <String>[];
     for (final CategoryInfo info in expenseCategories) {
@@ -30,10 +38,44 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Khata'),
+        actions: <Widget>[
+          IconButton(
+            icon: Icon(
+              hidden
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+            ),
+            tooltip: hidden ? 'Show amounts' : 'Hide amounts',
+            onPressed: () {
+              context.read<FinanceProvider>().setHideAmounts(!hidden);
+            },
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: <Widget>[
+          SizedBox(
+            height: 62,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: <Widget>[
+                _WalletChip(
+                  label: 'All accounts',
+                  value: money(provider.totalBalance),
+                  icon: Icons.account_balance_wallet_outlined,
+                ),
+                ...provider.accounts.map((Account account) {
+                  return _WalletChip(
+                    label: account.name,
+                    value: money(provider.accountBalance(account.id)),
+                    icon: account.kind.icon,
+                  );
+                }),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             elevation: 0,
             color: theme.colorScheme.surfaceContainerHigh,
@@ -53,10 +95,10 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    fmtMoney(provider.balance),
+                    money(provider.totalBalance),
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: provider.balance < 0
+                      color: provider.totalBalance < 0
                           ? const Color(0xFFE57373)
                           : theme.colorScheme.primary,
                     ),
@@ -74,7 +116,7 @@ class HomeScreen extends StatelessWidget {
                       Expanded(
                         child: _SummaryColumn(
                           label: 'Income',
-                          value: fmtMoney(income),
+                          value: money(income),
                           icon: Icons.arrow_downward,
                           color: theme.colorScheme.primary,
                         ),
@@ -82,7 +124,7 @@ class HomeScreen extends StatelessWidget {
                       Expanded(
                         child: _SummaryColumn(
                           label: 'Expense',
-                          value: fmtMoney(expense),
+                          value: money(expense),
                           icon: Icons.arrow_upward,
                           color: const Color(0xFFE57373),
                         ),
@@ -93,6 +135,130 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0,
+            color: theme.colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: <Widget>[
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor:
+                        theme.colorScheme.primary.withValues(alpha: 0.15),
+                    child: Icon(
+                      Icons.shield_outlined,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          'Safe to spend this month',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          pace == null
+                              ? 'Set budgets in the Plan tab to track your pace.'
+                              : pace <= 1
+                                  ? 'On track'
+                                  : 'Spending fast',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: pace != null && pace > 1
+                                ? const Color(0xFFE57373)
+                                : Colors.white.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    money(provider.safeToSpend()),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: provider.safeToSpend() < 0
+                          ? const Color(0xFFE57373)
+                          : theme.colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (upcoming.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            Card(
+              elevation: 0,
+              color: theme.colorScheme.surfaceContainerLow,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Upcoming bills, next 7 days',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ...upcoming.take(3).map(
+                      (({RecurringRule rule, DateTime date}) item) {
+                        final CategoryInfo info = categoryByName(
+                          item.rule.category,
+                          isIncome: item.rule.isIncome,
+                        );
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: <Widget>[
+                              Icon(info.icon, size: 17, color: info.color),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  item.rule.note.isNotEmpty
+                                      ? item.rule.note
+                                      : item.rule.category,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                fmtDateShort(item.date),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.55),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                money(item.rule.amount),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
           if (alerts.isNotEmpty) ...<Widget>[
             const SizedBox(height: 12),
             Card(
@@ -254,6 +420,60 @@ class TxnRow extends StatelessWidget {
             color: amountColor,
             fontWeight: FontWeight.w600,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One wallet chip in the home screen wallets strip.
+class _WalletChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _WalletChip({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerLow,
+      margin: const EdgeInsets.only(right: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(icon, size: 17, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.55),
+                  ),
+                ),
+                Text(
+                  value,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

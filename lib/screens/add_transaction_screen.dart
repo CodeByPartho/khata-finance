@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/account.dart';
 import '../models/categories.dart';
 import '../models/transaction.dart';
 import '../state/finance_provider.dart';
@@ -17,15 +18,18 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _tagController = TextEditingController();
 
   bool _isIncome = false;
   String _category = expenseCategories.first.name;
+  String? _accountId;
   DateTime _date = DateTime.now();
 
   @override
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
+    _tagController.dispose();
     super.dispose();
   }
 
@@ -59,6 +63,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       category: _category,
       date: _date,
       note: _noteController.text.trim(),
+      accountId: _accountId ?? kDefaultAccountId,
+      tag: _tagController.text.trim(),
     );
     context.read<FinanceProvider>().addTxn(txn);
     Navigator.of(context).pop();
@@ -67,6 +73,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final FinanceProvider provider = context.watch<FinanceProvider>();
+    final List<Account> accounts = provider.accounts;
+    if (_accountId == null && accounts.isNotEmpty) {
+      _accountId = accounts.any((Account a) => a.id == kDefaultAccountId)
+          ? kDefaultAccountId
+          : accounts.first.id;
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Add transaction')),
       body: Form(
@@ -152,6 +165,25 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               }).toList(),
             ),
             const SizedBox(height: 20),
+            DropdownButtonFormField<String>(
+              initialValue: _accountId,
+              decoration: const InputDecoration(
+                labelText: 'Account',
+                border: OutlineInputBorder(),
+              ),
+              items: accounts
+                  .map((Account a) => DropdownMenuItem<String>(
+                        value: a.id,
+                        child: Text(a.name),
+                      ))
+                  .toList(),
+              onChanged: (String? value) {
+                setState(() {
+                  _accountId = value;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
             Card(
               elevation: 0,
               color: theme.colorScheme.surfaceContainerLow,
@@ -174,6 +206,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               decoration: const InputDecoration(
                 labelText: 'Note (optional)',
                 hintText: 'What was this for?',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _tagController,
+              decoration: const InputDecoration(
+                labelText: 'Tag (optional)',
+                hintText: 'For example: family, office, recurring',
                 border: OutlineInputBorder(),
               ),
             ),

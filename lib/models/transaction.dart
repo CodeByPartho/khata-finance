@@ -1,3 +1,7 @@
+/// Id of the preset Cash account, used as the default account for
+/// transactions that were saved before accounts existed.
+const String kDefaultAccountId = 'cash';
+
 /// A single income or expense entry in the ledger.
 class Txn {
   final String id;
@@ -7,6 +11,12 @@ class Txn {
   final DateTime date;
   final String note;
 
+  /// Account or wallet this entry belongs to.
+  final String accountId;
+
+  /// Optional free-form tag, for example "recurring" or "family".
+  final String tag;
+
   const Txn({
     required this.id,
     required this.amount,
@@ -14,6 +24,8 @@ class Txn {
     required this.category,
     required this.date,
     required this.note,
+    this.accountId = kDefaultAccountId,
+    this.tag = '',
   });
 
   Txn copyWith({
@@ -23,6 +35,8 @@ class Txn {
     String? category,
     DateTime? date,
     String? note,
+    String? accountId,
+    String? tag,
   }) {
     return Txn(
       id: id ?? this.id,
@@ -31,6 +45,8 @@ class Txn {
       category: category ?? this.category,
       date: date ?? this.date,
       note: note ?? this.note,
+      accountId: accountId ?? this.accountId,
+      tag: tag ?? this.tag,
     );
   }
 
@@ -42,6 +58,8 @@ class Txn {
       'category': category,
       'date': date.toIso8601String(),
       'note': note,
+      'accountId': accountId,
+      'tag': tag,
     };
   }
 
@@ -53,6 +71,9 @@ class Txn {
       category: json['category'] as String,
       date: DateTime.parse(json['date'] as String),
       note: (json['note'] as String?) ?? '',
+      // Data saved by v1.0 has no account or tag: default safely.
+      accountId: (json['accountId'] as String?) ?? kDefaultAccountId,
+      tag: (json['tag'] as String?) ?? '',
     );
   }
 }

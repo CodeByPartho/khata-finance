@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
 import 'add_transaction_screen.dart';
-import 'budgets_screen.dart';
 import 'home_screen.dart';
+import 'more_screen.dart';
+import 'plan_screen.dart';
 import 'stats_screen.dart';
 
-/// App shell with three tabs and an Add button for new entries.
+/// App shell with four tabs and an Add button for new entries.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -19,7 +20,8 @@ class _MainShellState extends State<MainShell> {
   static const List<Widget> _pages = <Widget>[
     HomeScreen(),
     StatsScreen(),
-    BudgetsScreen(),
+    PlanScreen(),
+    MoreScreen(),
   ];
 
   void _openAdd() {
@@ -64,7 +66,12 @@ class _MainShellState extends State<MainShell> {
           NavigationDestination(
             icon: Icon(Icons.savings_outlined),
             selectedIcon: Icon(Icons.savings),
-            label: 'Budgets',
+            label: 'Plan',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.more_horiz),
+            selectedIcon: Icon(Icons.grid_view),
+            label: 'More',
           ),
         ],
       ),

@@ -75,8 +75,7 @@ void main() {
     expect(result.containsKey('Salary'), isFalse);
   });
 
-  test('monthlyExpenses returns the last 6 months including current',
-      () async {
+  test('monthlyExpenses returns the last 6 months including current', () async {
     final FinanceProvider provider = await emptyProvider();
 
     await provider.addTxn(

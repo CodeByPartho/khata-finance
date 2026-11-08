@@ -30,6 +30,56 @@ class StatsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
         children: <Widget>[
+          Card(
+            elevation: 0,
+            color: theme.colorScheme.surfaceContainerHigh,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Net worth',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.65),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    fmtMoney(provider.netWorth),
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: provider.netWorth < 0
+                          ? const Color(0xFFE57373)
+                          : theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _SummaryRow(
+                    label: 'In accounts',
+                    value: fmtMoney(provider.totalBalance),
+                    color: theme.colorScheme.primary,
+                  ),
+                  const Divider(height: 18),
+                  _SummaryRow(
+                    label: 'They owe me',
+                    value: fmtMoney(provider.totalLentRemaining),
+                    color: theme.colorScheme.primary,
+                  ),
+                  const Divider(height: 18),
+                  _SummaryRow(
+                    label: 'I owe',
+                    value: fmtMoney(provider.totalBorrowedRemaining),
+                    color: const Color(0xFFE57373),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 22),
           Text(
             fmtMonthYear(now),
             style: theme.textTheme.titleMedium?.copyWith(
@@ -128,6 +178,27 @@ class StatsScreen extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: MonthlyBarChart(data: provider.monthlyExpenses()),
+            ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            'Income vs expense, last 6 months',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            elevation: 0,
+            color: theme.colorScheme.surfaceContainerLow,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: IncomeExpenseChart(
+                data: provider.monthlyIncomeVsExpense(),
+              ),
             ),
           ),
         ],
