@@ -2,6 +2,12 @@
 
 Khata (Bangla for ledger) is a personal finance app for tracking income, expenses and monthly budgets in Bangladeshi taka, built with Flutter and a hand-drawn chart engine.
 
+Try it in your browser: https://codebypartho.github.io/khata-finance/
+
+## Download the APK
+
+Download the APK from the [v1.1.0 release](https://github.com/CodeByPartho/khata-finance/releases) on GitHub.
+
 Feature set benchmarked against leading finance apps (YNAB, Rocket Money, Monarch, Wallet by BudgetBakers, Spendee, Monefy, Money Manager) and Bangladesh money apps, November 2026.
 
 ## What is new in 1.1
@@ -29,12 +35,15 @@ Feature set benchmarked against leading finance apps (YNAB, Rocket Money, Monarc
 - Stats screen with a net worth card, spending by category (totals and share bars), a bar chart of the last 6 months of expenses, and a grouped income vs expense chart
 - Accounts, recurring rules, savings goals and debts, all persisted locally
 - Local persistence with shared_preferences: data survives restarts, no account and no server needed
-- First run seeds realistic demo data in taka so the app can be explored immediately; demo data can be restored or everything cleared from Settings
+- First run seeds realistic demo data in taka so the app can be explored immediately; in Settings, under the Danger zone, Reset demo data restores the demo data and Clear all data wipes everything
 - Dark Material 3 theme with a single green accent (#39FF88) on a near-black background
 
 ## Screenshots
 
-Screenshots coming soon.
+![Home](screenshots/home.png)
+![Stats](screenshots/stats.png)
+![Transactions](screenshots/transactions.png)
+![Settings](screenshots/settings.png)
 
 ## Tech stack
 
