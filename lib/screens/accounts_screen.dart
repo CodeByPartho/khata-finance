@@ -5,6 +5,7 @@ import '../models/account.dart';
 import '../models/transfer.dart';
 import '../state/finance_provider.dart';
 import '../utils/format.dart';
+import 'cards_screen.dart';
 
 /// Accounts list with balances, add account, and transfers between
 /// accounts (with fee support for MFS cash out style charges).
@@ -184,6 +185,21 @@ class AccountsScreen extends StatelessWidget {
               ),
             );
           }),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const CardsScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.credit_card),
+            label: const Text('Cards and billing cycles'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(50),
+            ),
+          ),
           const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: () {

@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/account.dart';
+import '../models/book.dart';
 import '../models/debt_entry.dart';
 import '../models/goal.dart';
+import '../models/payment_card.dart';
 import '../models/recurring_rule.dart';
 import '../models/transaction.dart';
 import '../models/transfer.dart';
@@ -17,15 +19,22 @@ import '../utils/format.dart';
 /// JSON in shared_preferences.
 class FinanceProvider extends ChangeNotifier {
   static const String _txnsKey = 'khata_txns_v1';
-  static const String _budgetsKey = 'khata_budgets_v1';
   static const String _seededKey = 'khata_seeded_v1';
   static const String _accountsKey = 'khata_accounts_v1';
-  static const String _transfersKey = 'khata_transfers_v1';
-  static const String _rulesKey = 'khata_rules_v1';
-  static const String _goalsKey = 'khata_goals_v1';
-  static const String _debtsKey = 'khata_debts_v1';
   static const String _hideAmountsKey = 'khata_hide_amounts_v1';
   static const String _pinHashKey = 'khata_pin_hash_v1';
+  static const String _booksKey = 'khata_books_v1';
+  static const String _activeBookKey = 'khata_active_book_v1';
+  static const String _booksMigratedKey = 'khata_books_migrated_v1';
+
+  /// Storage key for [base] inside [bookId]. Every book keeps its
+  /// own transactions, budgets, accounts, transfers, rules, goals,
+  /// debts and cards under its own keys.
+  static String _bookKey(String bookId, String base) {
+    return 'khata_${bookId}_$base';
+  }
+
+  String _key(String base) => _bookKey(_activeBookId, base);
 
   List<Txn> _txns = <Txn>[];
   Map<String, double> _budgets = <String, double>{};
@@ -34,6 +43,9 @@ class FinanceProvider extends ChangeNotifier {
   List<RecurringRule> _rules = <RecurringRule>[];
   List<Goal> _goals = <Goal>[];
   List<DebtEntry> _debts = <DebtEntry>[];
+  List<PaymentCard> _cards = <PaymentCard>[];
+  List<Book> _books = const <Book>[Book(id: 'personal', name: 'Personal')];
+  String _activeBookId = 'personal';
   bool _hideAmounts = false;
   String? _pinHash;
   bool _loaded = false;
@@ -580,6 +592,138 @@ class FinanceProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------
+  // Books: separate ledgers
+  // ---------------------------------------------------------------
+
+  List<Book> get books => List<Book>.unmodifiable(_books);
+
+  Book get activeBook {
+    for (final Book book in _books) {
+      if (book.id == _activeBookId) {
+        return book;
+      }
+    }
+    return _books.first;
+  }
+
+  String get activeBookId => _activeBookId;
+
+  /// Creates a new empty book and switches to it.
+  Future<Book> addBook(String name) async {
+    final Book book = Book(
+      id: 'book-${DateTime.now().microsecondsSinceEpoch}',
+      name: name.trim(),
+    );
+    _books = <Book>[..._books, book];
+    _activeBookId = book.id;
+    _txns = <Txn>[];
+    _budgets = <String, double>{};
+    _accounts = presetAccounts();
+    _transfers = <Transfer>[];
+    _rules = <RecurringRule>[];
+    _goals = <Goal>[];
+    _debts = <DebtEntry>[];
+    _cards = <PaymentCard>[];
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await _saveBooks(prefs);
+    await _saveAll(prefs);
+    notifyListeners();
+    return book;
+  }
+
+  /// Switches to another book, loading its own data. A transaction
+  /// saved in one book never appears in another.
+  Future<void> switchBook(String id) async {
+    if (id == _activeBookId || !_books.any((Book b) => b.id == id)) {
+      return;
+    }
+    _activeBookId = id;
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_activeBookKey, id);
+    _loaded = false;
+    notifyListeners();
+    await load();
+  }
+
+  /// Deletes a book and all of its data. The last book cannot be
+  /// deleted. Switching to the first remaining book follows.
+  Future<bool> deleteBook(String id) async {
+    if (_books.length <= 1 || !_books.any((Book b) => b.id == id)) {
+      return false;
+    }
+    const List<String> bases = <String>[
+      'txns_v1',
+      'budgets_v1',
+      'accounts_v1',
+      'transfers_v1',
+      'rules_v1',
+      'goals_v1',
+      'debts_v1',
+      'cards_v1',
+    ];
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    for (final String base in bases) {
+      await prefs.remove(_bookKey(id, base));
+    }
+    _books = _books.where((Book b) => b.id != id).toList();
+    final bool wasActive = _activeBookId == id;
+    if (wasActive) {
+      _activeBookId = _books.first.id;
+    }
+    await _saveBooks(prefs);
+    if (wasActive) {
+      _loaded = false;
+      notifyListeners();
+      await load();
+    } else {
+      notifyListeners();
+    }
+    return true;
+  }
+
+  // ---------------------------------------------------------------
+  // Payment cards and billing cycles
+  // ---------------------------------------------------------------
+
+  List<PaymentCard> get cards => List<PaymentCard>.unmodifiable(_cards);
+
+  Future<void> addCard(PaymentCard card) async {
+    _cards = <PaymentCard>[..._cards, card];
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await _saveCards(prefs);
+    notifyListeners();
+  }
+
+  Future<void> deleteCard(String id) async {
+    _cards = _cards.where((PaymentCard c) => c.id != id).toList();
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await _saveCards(prefs);
+    notifyListeners();
+  }
+
+  /// Total expense in the card's current billing cycle. When the
+  /// card is linked to one account, only that account counts.
+  double cardCycleSpend(PaymentCard card, {DateTime? now}) {
+    final DateTime date = now ?? DateTime.now();
+    final DateTime start = card.cycle.cycleStart(date);
+    final DateTime end = card.cycle.cycleEnd(date);
+    double total = 0;
+    for (final Txn txn in _txns) {
+      if (txn.isIncome) {
+        continue;
+      }
+      if (txn.date.isBefore(start) || txn.date.isAfter(end)) {
+        continue;
+      }
+      if (card.accountId.isNotEmpty && txn.accountId != card.accountId) {
+        continue;
+      }
+      total += txn.amount;
+    }
+    return total;
+  }
+
+  // ---------------------------------------------------------------
   // Net worth
   // ---------------------------------------------------------------
 
@@ -643,6 +787,8 @@ class FinanceProvider extends ChangeNotifier {
       'rules': _rules.map((RecurringRule r) => r.toJson()).toList(),
       'goals': _goals.map((Goal g) => g.toJson()).toList(),
       'debts': _debts.map((DebtEntry d) => d.toJson()).toList(),
+      'cards': _cards.map((PaymentCard c) => c.toJson()).toList(),
+      'book': activeBook.name,
       'hideAmounts': _hideAmounts,
     };
   }
@@ -718,6 +864,15 @@ class FinanceProvider extends ChangeNotifier {
             .toList();
       }
 
+      List<PaymentCard> newCards = <PaymentCard>[];
+      if (decoded['cards'] is List) {
+        newCards = (decoded['cards'] as List<dynamic>)
+            .map(
+              (dynamic e) => PaymentCard.fromJson(e as Map<String, dynamic>),
+            )
+            .toList();
+      }
+
       final bool newHide = (decoded['hideAmounts'] as bool?) ?? _hideAmounts;
 
       _txns = newTxns;
@@ -727,6 +882,7 @@ class FinanceProvider extends ChangeNotifier {
       _rules = newRules;
       _goals = newGoals;
       _debts = newDebts;
+      _cards = newCards;
       _hideAmounts = newHide;
 
       final SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -775,15 +931,64 @@ class FinanceProvider extends ChangeNotifier {
   // Loading, saving, demo data
   // ---------------------------------------------------------------
 
-  /// Loads saved data. On the very first run it seeds demo data once;
-  /// the seeded flag keeps the demo data from coming back after the
-  /// user clears everything. Due recurring rules are posted after
-  /// every load.
+  /// Loads saved data for the active book. On the very first run it
+  /// seeds demo data once into the Personal book. When upgrading from
+  /// v1.1, the old shared keys are moved into the Personal book once,
+  /// so existing data becomes the default book. Due recurring rules
+  /// are posted after every load.
   Future<void> load() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    final bool seeded = prefs.getBool(_seededKey) ?? false;
+    final bool migrated = prefs.getBool(_booksMigratedKey) ?? false;
+    bool freshInstall = false;
 
-    if (!seeded) {
+    if (!migrated) {
+      _books = const <Book>[Book(id: 'personal', name: 'Personal')];
+      _activeBookId = 'personal';
+      final bool hadOldData =
+          (prefs.getBool(_seededKey) ?? false) ||
+              prefs.getString(_txnsKey) != null ||
+              prefs.getString(_accountsKey) != null;
+      if (hadOldData) {
+        // One-time migration: copy the old shared keys into the
+        // Personal book, then remove the old keys.
+        const List<String> bases = <String>[
+          'txns_v1',
+          'budgets_v1',
+          'accounts_v1',
+          'transfers_v1',
+          'rules_v1',
+          'goals_v1',
+          'debts_v1',
+        ];
+        for (final String base in bases) {
+          final String oldKey = 'khata_$base';
+          final String? raw = prefs.getString(oldKey);
+          if (raw != null) {
+            await prefs.setString(_bookKey('personal', base), raw);
+            await prefs.remove(oldKey);
+          }
+        }
+      } else {
+        freshInstall = true;
+      }
+      await prefs.setBool(_booksMigratedKey, true);
+      await _saveBooks(prefs);
+    } else {
+      _books = _readList<Book>(
+        prefs,
+        _booksKey,
+        (Map<String, dynamic> json) => Book.fromJson(json),
+      );
+      if (_books.isEmpty) {
+        _books = const <Book>[Book(id: 'personal', name: 'Personal')];
+      }
+      _activeBookId = prefs.getString(_activeBookKey) ?? 'personal';
+      if (!_books.any((Book b) => b.id == _activeBookId)) {
+        _activeBookId = _books.first.id;
+      }
+    }
+
+    if (freshInstall) {
       _txns = _demoTxns();
       _budgets = _defaultBudgets();
       _accounts = presetAccounts();
@@ -791,6 +996,7 @@ class FinanceProvider extends ChangeNotifier {
       _rules = <RecurringRule>[];
       _goals = <Goal>[];
       _debts = <DebtEntry>[];
+      _cards = <PaymentCard>[];
       await _saveAll(prefs);
       await prefs.setBool(_seededKey, true);
     } else {
@@ -798,33 +1004,39 @@ class FinanceProvider extends ChangeNotifier {
       _budgets = _readBudgets(prefs);
       _accounts = _readList<Account>(
         prefs,
-        _accountsKey,
+        _key('accounts_v1'),
         (Map<String, dynamic> json) => Account.fromJson(json),
       );
       if (_accounts.isEmpty) {
-        // Upgrade from v1.0, which had no accounts: create presets.
+        // Upgrade from v1.0, which had no accounts, or a new empty
+        // book: create presets.
         _accounts = presetAccounts();
         await _saveAccounts(prefs);
       }
       _transfers = _readList<Transfer>(
         prefs,
-        _transfersKey,
+        _key('transfers_v1'),
         (Map<String, dynamic> json) => Transfer.fromJson(json),
       );
       _rules = _readList<RecurringRule>(
         prefs,
-        _rulesKey,
+        _key('rules_v1'),
         (Map<String, dynamic> json) => RecurringRule.fromJson(json),
       );
       _goals = _readList<Goal>(
         prefs,
-        _goalsKey,
+        _key('goals_v1'),
         (Map<String, dynamic> json) => Goal.fromJson(json),
       );
       _debts = _readList<DebtEntry>(
         prefs,
-        _debtsKey,
+        _key('debts_v1'),
         (Map<String, dynamic> json) => DebtEntry.fromJson(json),
+      );
+      _cards = _readList<PaymentCard>(
+        prefs,
+        _key('cards_v1'),
+        (Map<String, dynamic> json) => PaymentCard.fromJson(json),
       );
     }
     _hideAmounts = prefs.getBool(_hideAmountsKey) ?? false;
@@ -834,9 +1046,10 @@ class FinanceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Removes all financial data. Preset accounts are recreated empty
-  /// so the app stays usable. The seeded flag stays set, so demo data
-  /// does not return. PIN and display settings are kept.
+  /// Removes all financial data in the active book only. Preset
+  /// accounts are recreated empty so the app stays usable. The
+  /// seeded flag stays set, so demo data does not return. PIN and
+  /// display settings are kept. Other books are untouched.
   Future<void> clearAllData() async {
     _txns = <Txn>[];
     _budgets = <String, double>{};
@@ -845,20 +1058,23 @@ class FinanceProvider extends ChangeNotifier {
     _rules = <RecurringRule>[];
     _goals = <Goal>[];
     _debts = <DebtEntry>[];
+    _cards = <PaymentCard>[];
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_txnsKey);
-    await prefs.remove(_budgetsKey);
-    await prefs.remove(_transfersKey);
-    await prefs.remove(_rulesKey);
-    await prefs.remove(_goalsKey);
-    await prefs.remove(_debtsKey);
+    await prefs.remove(_key('txns_v1'));
+    await prefs.remove(_key('budgets_v1'));
+    await prefs.remove(_key('transfers_v1'));
+    await prefs.remove(_key('rules_v1'));
+    await prefs.remove(_key('goals_v1'));
+    await prefs.remove(_key('debts_v1'));
+    await prefs.remove(_key('cards_v1'));
     await _saveAccounts(prefs);
     await prefs.setBool(_seededKey, true);
     notifyListeners();
   }
 
-  /// Restores the demo transactions and default budgets, with empty
-  /// preset accounts and no transfers, rules, goals or debts.
+  /// Restores the demo transactions and default budgets in the
+  /// active book, with empty preset accounts and no transfers,
+  /// rules, goals, debts or cards.
   Future<void> resetToDemo() async {
     _txns = _demoTxns();
     _budgets = _defaultBudgets();
@@ -867,6 +1083,7 @@ class FinanceProvider extends ChangeNotifier {
     _rules = <RecurringRule>[];
     _goals = <Goal>[];
     _debts = <DebtEntry>[];
+    _cards = <PaymentCard>[];
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await _saveAll(prefs);
     await prefs.setBool(_seededKey, true);
@@ -895,13 +1112,13 @@ class FinanceProvider extends ChangeNotifier {
   List<Txn> _readTxns(SharedPreferences prefs) {
     return _readList<Txn>(
       prefs,
-      _txnsKey,
+      _key('txns_v1'),
       (Map<String, dynamic> json) => Txn.fromJson(json),
     );
   }
 
   Map<String, double> _readBudgets(SharedPreferences prefs) {
-    final String? raw = prefs.getString(_budgetsKey);
+    final String? raw = prefs.getString(_key('budgets_v1'));
     if (raw == null || raw.isEmpty) {
       return <String, double>{};
     }
@@ -930,20 +1147,20 @@ class FinanceProvider extends ChangeNotifier {
   Future<void> _saveTxns(SharedPreferences prefs) async {
     await _saveList<Txn>(
       prefs,
-      _txnsKey,
+      _key('txns_v1'),
       _txns,
       (Txn t) => t.toJson(),
     );
   }
 
   Future<void> _saveBudgets(SharedPreferences prefs) async {
-    await prefs.setString(_budgetsKey, jsonEncode(_budgets));
+    await prefs.setString(_key('budgets_v1'), jsonEncode(_budgets));
   }
 
   Future<void> _saveAccounts(SharedPreferences prefs) async {
     await _saveList<Account>(
       prefs,
-      _accountsKey,
+      _key('accounts_v1'),
       _accounts,
       (Account a) => a.toJson(),
     );
@@ -952,7 +1169,7 @@ class FinanceProvider extends ChangeNotifier {
   Future<void> _saveTransfers(SharedPreferences prefs) async {
     await _saveList<Transfer>(
       prefs,
-      _transfersKey,
+      _key('transfers_v1'),
       _transfers,
       (Transfer t) => t.toJson(),
     );
@@ -961,7 +1178,7 @@ class FinanceProvider extends ChangeNotifier {
   Future<void> _saveRules(SharedPreferences prefs) async {
     await _saveList<RecurringRule>(
       prefs,
-      _rulesKey,
+      _key('rules_v1'),
       _rules,
       (RecurringRule r) => r.toJson(),
     );
@@ -970,7 +1187,7 @@ class FinanceProvider extends ChangeNotifier {
   Future<void> _saveGoals(SharedPreferences prefs) async {
     await _saveList<Goal>(
       prefs,
-      _goalsKey,
+      _key('goals_v1'),
       _goals,
       (Goal g) => g.toJson(),
     );
@@ -979,10 +1196,29 @@ class FinanceProvider extends ChangeNotifier {
   Future<void> _saveDebts(SharedPreferences prefs) async {
     await _saveList<DebtEntry>(
       prefs,
-      _debtsKey,
+      _key('debts_v1'),
       _debts,
       (DebtEntry d) => d.toJson(),
     );
+  }
+
+  Future<void> _saveCards(SharedPreferences prefs) async {
+    await _saveList<PaymentCard>(
+      prefs,
+      _key('cards_v1'),
+      _cards,
+      (PaymentCard c) => c.toJson(),
+    );
+  }
+
+  Future<void> _saveBooks(SharedPreferences prefs) async {
+    await _saveList<Book>(
+      prefs,
+      _booksKey,
+      _books,
+      (Book b) => b.toJson(),
+    );
+    await prefs.setString(_activeBookKey, _activeBookId);
   }
 
   Future<void> _saveAll(SharedPreferences prefs) async {
@@ -993,6 +1229,7 @@ class FinanceProvider extends ChangeNotifier {
     await _saveRules(prefs);
     await _saveGoals(prefs);
     await _saveDebts(prefs);
+    await _saveCards(prefs);
   }
 
   Map<String, double> _defaultBudgets() {

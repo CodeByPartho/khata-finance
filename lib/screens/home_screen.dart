@@ -7,6 +7,7 @@ import '../models/recurring_rule.dart';
 import '../models/transaction.dart';
 import '../state/finance_provider.dart';
 import '../utils/format.dart';
+import '../widgets/book_switcher.dart';
 import 'transactions_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -37,8 +38,9 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Khata'),
+        title: Text('Khata - ${provider.activeBook.name}'),
         actions: <Widget>[
+          const BookSwitcher(),
           IconButton(
             icon: Icon(
               hidden

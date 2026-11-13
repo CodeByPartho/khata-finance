@@ -1,7 +1,7 @@
 name: khata_finance
 description: Khata - Personal Finance Tracker. Track income, expenses and monthly budgets in Bangladeshi taka, with hand-drawn charts and local persistence.
 publish_to: "none"
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -14,6 +14,8 @@ dependencies:
   shared_preferences: ^2.3.2
   cupertino_icons: ^1.0.8
   crypto: ^3.0.3
+  google_mlkit_text_recognition: ^1.0.3
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:

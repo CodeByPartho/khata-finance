@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Camera is used only for on-device receipt scanning (ML Kit). -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <application
         android:label="khata_finance"
         android:name="${applicationName}"

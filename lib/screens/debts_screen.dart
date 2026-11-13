@@ -276,6 +276,9 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
   final TextEditingController _personController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _rateController = TextEditingController();
+  final TextEditingController _minPaymentController =
+      TextEditingController();
 
   bool _iLent = true;
   DateTime _date = DateTime.now();
@@ -285,6 +288,8 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
     _personController.dispose();
     _amountController.dispose();
     _noteController.dispose();
+    _rateController.dispose();
+    _minPaymentController.dispose();
     super.dispose();
   }
 
@@ -314,6 +319,9 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
       iLent: _iLent,
       date: _date,
       note: _noteController.text.trim(),
+      annualRatePercent:
+          double.tryParse(_rateController.text.trim()) ?? 0,
+      minPayment: double.tryParse(_minPaymentController.text.trim()) ?? 0,
     );
     context.read<FinanceProvider>().addDebt(entry);
     Navigator.of(context).pop();
@@ -385,6 +393,28 @@ class _AddDebtScreenState extends State<AddDebtScreen> {
                 }
                 return null;
               },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _rateController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Interest rate per year, percent (optional)',
+                hintText: '0 means interest free',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _minPaymentController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Minimum monthly payment (optional)',
+                prefixText: '৳ ',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: 16),
             Card(

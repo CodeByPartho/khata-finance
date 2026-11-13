@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'accounts_screen.dart';
+import 'cards_screen.dart';
 import 'debts_screen.dart';
 import 'recurring_screen.dart';
 import 'settings_screen.dart';
@@ -54,6 +55,12 @@ class MoreScreen extends StatelessWidget {
             title: 'Accounts',
             subtitle: 'Cash, bKash, Nagad, Rocket, bank and transfers',
             page: const AccountsScreen(),
+          ),
+          tile(
+            icon: Icons.credit_card_outlined,
+            title: 'Cards and billing cycles',
+            subtitle: 'Cycle spend, days left and due dates',
+            page: const CardsScreen(),
           ),
           tile(
             icon: Icons.repeat,

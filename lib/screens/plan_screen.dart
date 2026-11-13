@@ -5,6 +5,7 @@ import '../models/goal.dart';
 import '../state/finance_provider.dart';
 import '../utils/format.dart';
 import 'budgets_screen.dart';
+import 'debt_planner_screen.dart';
 
 /// Plan tab: savings goals on top, monthly budgets below.
 class PlanScreen extends StatelessWidget {
@@ -20,6 +21,8 @@ class PlanScreen extends StatelessWidget {
           GoalsBody(),
           SizedBox(height: 24),
           BudgetsBody(),
+          SizedBox(height: 24),
+          DebtPlannerBody(),
         ],
       ),
     );

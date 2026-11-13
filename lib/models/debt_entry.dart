@@ -11,6 +11,14 @@ class DebtEntry {
   final String note;
   final double settled;
 
+  /// Optional annual interest rate in percent for money owed.
+  /// 0 means interest free. Used by the debt payoff planner.
+  final double annualRatePercent;
+
+  /// Optional minimum monthly payment in taka. 0 means no fixed
+  /// minimum; the planner then assumes 5 percent of the balance.
+  final double minPayment;
+
   const DebtEntry({
     required this.id,
     required this.person,
@@ -19,6 +27,8 @@ class DebtEntry {
     required this.date,
     this.note = '',
     this.settled = 0,
+    this.annualRatePercent = 0,
+    this.minPayment = 0,
   });
 
   /// Amount still outstanding on this entry.
@@ -29,7 +39,11 @@ class DebtEntry {
 
   bool get isSettled => remaining <= 0;
 
-  DebtEntry copyWith({double? settled}) {
+  DebtEntry copyWith({
+    double? settled,
+    double? annualRatePercent,
+    double? minPayment,
+  }) {
     return DebtEntry(
       id: id,
       person: person,
@@ -38,6 +52,8 @@ class DebtEntry {
       date: date,
       note: note,
       settled: settled ?? this.settled,
+      annualRatePercent: annualRatePercent ?? this.annualRatePercent,
+      minPayment: minPayment ?? this.minPayment,
     );
   }
 
@@ -50,6 +66,8 @@ class DebtEntry {
       'date': date.toIso8601String(),
       'note': note,
       'settled': settled,
+      'annualRatePercent': annualRatePercent,
+      'minPayment': minPayment,
     };
   }
 
@@ -62,6 +80,9 @@ class DebtEntry {
       date: DateTime.parse(json['date'] as String),
       note: (json['note'] as String?) ?? '',
       settled: (json['settled'] as num?)?.toDouble() ?? 0,
+      annualRatePercent:
+          (json['annualRatePercent'] as num?)?.toDouble() ?? 0,
+      minPayment: (json['minPayment'] as num?)?.toDouble() ?? 0,
     );
   }
 }
